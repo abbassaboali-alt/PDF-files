@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prudle | إدارة ملفات PDF للدورات</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
+<style>
+:root{--blue:#164478;--ink:#193451;--orange:#f39819;--bg:#f2f6fb;--muted:#667d93}*{box-sizing:border-box}body{font-family:Tajawal,Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0}header{padding:35px 20px;background:linear-gradient(115deg,#123b6d,#236cb1);color:white}header .wrap{max-width:1180px;margin:auto}header h1{font-size:30px;margin:0 0 8px}header p{margin:0;color:#d8e9ff}main{max-width:1180px;margin:25px auto;padding:0 15px 50px}.panel{background:#fff;border:1px solid #e2eaf4;border-radius:21px;padding:23px;margin-bottom:19px;box-shadow:0 12px 36px #16447812}.head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:15px}.head h2{margin:0;font-size:22px;color:var(--blue)}.tag{background:#e9f4ff;color:var(--blue);font-weight:800;padding:7px 12px;border-radius:40px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.field label{display:block;font-weight:800;margin-bottom:7px;font-size:14px}.field input,.field select{width:100%;background:#fbfdff;border:1px solid #cfdded;border-radius:11px;padding:13px 12px;min-height:47px;font-family:inherit;font-size:15px;color:#183753}.field input:focus,.field select:focus{outline:2px solid #b3d8ff}button{border:0;border-radius:11px;padding:12px 18px;cursor:pointer;font-family:inherit;font-weight:900;font-size:14px;background:var(--blue);color:#fff}button.secondary{color:var(--blue);background:#e9f2fc}button.danger{background:#b6323b}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}.hint{font-size:13px;line-height:1.8;color:var(--muted)}.status{padding:11px 14px;background:#eaf4ff;border-radius:10px;font-weight:800;margin:10px 0;white-space:pre-wrap}.list{display:grid;gap:12px}.item{border:1px solid #dde8f3;border-radius:13px;padding:16px;display:flex;align-items:center;gap:15px;justify-content:space-between;flex-wrap:wrap}.item b{font-size:16px}.item small{display:block;color:var(--muted);line-height:1.7}.item .buttons{display:flex;gap:6px;flex-wrap:wrap}.empty{padding:25px;text-align:center;background:#f7faff;border-radius:12px;color:#779}#workspace{display:none}#authPanel{max-width:650px;margin:auto}.authgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.badge{background:#e9f8ee;color:#17723a;border-radius:20px;padding:7px 12px}#pdfModal{display:none;position:fixed;inset:0;z-index:9999;background:#071b30b8;padding:15px}#pdfModal.open{display:flex;flex-direction:column;gap:6px}#pdfModal .toolbar{display:flex;justify-content:space-between;color:#fff;gap:10px;align-items:center}#pdfModal iframe{flex:1;width:100%;border:0;border-radius:12px;background:white}#pdfModal button{background:#fff;color:#164478}progress{width:100%;height:14px;accent-color:#164478} @media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.grid,.authgrid{grid-template-columns:1fr}.panel{padding:15px}header h1{font-size:24px}}
+</style></head><body>
+<header><div class="wrap"><h1>Prudle · إدارة ملفات PDF</h1><p>رفع موارد الدورات إلى Cloudflare R2 وربطها بالفرع والقسم ونوع الدورة والفترة وتاريخ البداية</p></div></header>
+<main><section class="panel" id="authPanel"><div class="head"><h2>الدخول الإداري</h2><span class="tag">Firebase Authentication</span></div><p class="hint">إذا كانت جلسة Firebase متاحة على نفس نطاق Prudle، ستُفتح اللوحة تلقائيًا. وإلا استخدم حساب الإدارة. الـWorker يتحقق من الصلاحيات.</p><div class="authgrid"><div class="field"><label>البريد الإلكتروني</label><input id="email" type="email" autocomplete="username"></div><div class="field"><label>كلمة المرور</label><input id="password" type="password" autocomplete="current-password"></div></div><div class="actions"><button id="login">تسجيل الدخول</button><span id="who" class="hint"></span><button id="logout" class="secondary" hidden>خروج من هذه الصفحة</button></div><div class="status" id="message" role="status">جارٍ التحقق من جلسة Prudle…</div></section>
+<div id="workspace"><div class="status" id="workspaceStatus" hidden></div><section class="panel"><div class="head"><h2>1. تحديد الدورة المستهدفة</h2><button class="secondary" id="reload">تحديث الدورات</button></div>
+<div class="grid">
+<div class="field"><label>الفرع · Branch</label><select id="branch"></select></div>
+<div class="field"><label>القسم · Section</label><select id="section"></select></div>
+<div class="field"><label>نوع الدورة · Course Type</label><select id="courseType"></select></div>
+<div class="field"><label>الفترة · Period</label><select id="period"></select></div>
+<div class="field"><label>تاريخ بداية الدورة · Starting Date</label><select id="startingDate"></select></div>
+<div class="field"><label>الدورة · Course</label><select id="courseId"></select></div>
+</div><p id="courseInfo" class="hint">كل القوائم تتكون تلقائيًا من سجلات Courses الموجودة في مشروع Firebase.</p></section>
+<section class="panel"><div class="head"><h2>2. رفع ملف PDF</h2><span class="tag">Cloudflare R2 · حد 20 MB</span></div><div class="grid">
+<div class="field"><label>عنوان الملف</label><input id="title" maxlength="140" placeholder="مثال: أوراق عمل المستوى الأول"></div>
+<div class="field"><label>تصنيف الملف</label><select id="category"><option>كتب ومراجع</option><option>خطط دراسية</option><option>أوراق عمل</option><option>واجبات</option><option>اختبارات</option><option>تعليمات</option><option>أخرى</option></select></div>
+<div class="field"><label>يظهر لمن؟</label><select id="audience"><option value="both">الطالب والمدرب</option><option value="trainer">المدرب فقط</option><option value="student">الطالب فقط</option></select></div>
+<div class="field"><label>اختر ملف PDF من الجهاز</label><input id="file" type="file" accept=".pdf,application/pdf"></div></div>
+<p class="hint">الملف يُحفظ داخل R2 الخاص، وليس في Firebase Storage. نشره لدى الطالب والمدرب يتطلب إضافة قارئ الملفات وتحقق الصلاحيات إلى لوحتيهما.</p><div class="actions"><button id="upload">رفع وحفظ الملف</button><span id="selectedCourse" class="hint"></span></div><progress id="progress" value="0" max="100" hidden></progress></section>
+<section class="panel"><div class="head"><h2>3. الملفات المحفوظة</h2><button class="secondary" id="refreshFiles">تحديث الملفات</button></div><div class="list" id="files"><div class="empty">لا توجد ملفات معروضة بعد.</div></div></section></div></main>
+<div id="pdfModal"><div class="toolbar"><strong id="modalTitle">عرض PDF</strong><button id="closeModal">إغلاق ×</button></div><iframe id="viewer" title="PDF viewer" src="about:blank"></iframe></div>
+<script>
+'use strict';
+const API='https://api-prudle.abbassaboali.workers.dev';
+const CFG={apiKey:'AIzaSyCCFBvZosI8dwShZjxvZzI-SU5igEbcOKk',authDomain:'prudle-system.firebaseapp.com',projectId:'prudle-system'};
+if(!firebase.apps.length)firebase.initializeApp(CFG);
+const auth=firebase.auth(), db=firebase.firestore(),$=id=>document.getElementById(id);
+let courses=[],currentUser=null,files=[],objectUrl=null,busy=false;
+const fields=['branch','section','courseType','period','startingDate','courseId'];
+function status(msg){$('message').textContent=msg;const el=$('workspaceStatus');if(el){el.hidden=$('workspace').style.display==='none';el.textContent=msg;}}function text(v){return String(v??'').trim()}function dateValue(v){if(v&&typeof v==='object'){if(typeof v.toDate==='function')v=v.toDate();else if(v.value)v=v.value} if(v instanceof Date)return v.toISOString().slice(0,10);return text(v).slice(0,10)}
+function mapCourse(doc){const c=doc.data();return {id:doc.id,course:text(c.TrainingCourse||c.courseName),branch:text(c.Branch),section:text(c.Section),courseType:text(c.CourseType),period:text(c.Period),startingDate:dateValue(c.StartingDate||c.StartDate||c.startingDate),trainer:text(c.Trainer),status:text(c.status)}}
+function optionize(id,values,prompt){let el=$(id),prev=el.value;el.replaceChildren();let initial=new Option(prompt,'');el.add(initial);values.forEach(v=>el.add(new Option(v,v)));el.value=values.includes(prev)?prev:''}
+function cascade(){const props=['branch','section','courseType','period','startingDate'];for(let i=0;i<props.length;i++){const prop=props[i];const matches=courses.filter(c=>props.slice(0,i).every(k=>!$(k).value||c[k]===$(k).value));const values=[...new Set(matches.map(c=>c[prop]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));optionize(prop,values,'اختر '+({branch:'الفرع',section:'القسم',courseType:'نوع الدورة',period:'الفترة',startingDate:'تاريخ البداية'}[prop]));}
+const matches=courses.filter(c=>props.every(k=>!$(k).value||c[k]===$(k).value));let el=$('courseId'),prev=el.value;el.replaceChildren();el.add(new Option('اختر الدورة',''));matches.forEach(c=>el.add(new Option([c.course||c.id,c.trainer||'',c.period||''].filter(Boolean).join(' · '),c.id)));el.value=matches.some(c=>c.id===prev)?prev:'';showCourse()}
+function showCourse(){const c=courses.find(x=>x.id===$('courseId').value);$('selectedCourse').textContent=c?`${c.branch} · ${c.section} · ${c.course}`:'يجب اختيار دورة قبل الرفع';$('courseInfo').textContent=c?`الدورة: ${c.course} | المدرب: ${c.trainer||'غير محدد'} | الفترة: ${c.period||'غير محددة'} | البداية: ${c.startingDate||'غير محدد'}`:`${courses.length} دورة تم تحميلها. اختر الفلاتر ثم الدورة.`}
+fields.slice(0,5).forEach(id=>$(id).addEventListener('change',()=>{const idx=fields.indexOf(id);fields.slice(idx+1).forEach(x=>$(x).value='');cascade()}));$('courseId').addEventListener('change',showCourse);
+$('login').onclick=async()=>{try{status('جاري تسجيل الدخول…');await auth.signInWithEmailAndPassword($('email').value.trim(),$('password').value)}catch(e){status('تعذر الدخول: '+e.message)}};
+$('logout').onclick=()=>auth.signOut().catch(e=>status('تعذر تسجيل الخروج: '+e.message));
+auth.onAuthStateChanged(async user=>{
+  currentUser=user;
+  $('workspace').style.display='none';
+  $('authPanel').style.display='block';
+  $('login').hidden=!!user;
+  $('logout').hidden=!user;
+  $('who').textContent=user?.email||'';
+  if(!user){status('لم تُكتشف جلسة Firebase صالحة. استخدم دخول الإدارة مرة واحدة.');return;}
+  status('جارٍ التحقق من جلسة الإدارة وصلاحيتها لدى الـWorker…');
+  try{
+    await user.getIdToken();
+    // Ask the Worker before exposing any administrative UI. Never trust localStorage roles.
+    await requestApi('/pdf/resources');
+    if(auth.currentUser!==user)return;
+    $('authPanel').style.display='none';
+    $('workspace').style.display='block';
+    await Promise.allSettled([loadCourses(),loadFiles()]);
+  }catch(err){
+    $('workspace').style.display='none';
+    $('authPanel').style.display='block';
+    status('تعذر التحقق من صلاحية إدارة ملفات PDF: '+(err.message||err)+' — تحقق من صلاحية admin وحساب Firebase في الـWorker.');
+  }
+});
+async function loadCourses(){if(!currentUser)return;try{const snap=await db.collection('Courses').get();courses=snap.docs.map(mapCourse).sort((a,b)=>a.course.localeCompare(b.course,'ar'));cascade();status('تم تحميل '+courses.length+' دورة. إذا لم تظهر دورات، تحقق من صلاحية القراءة في Firestore.')}catch(e){status('فشل تحميل الدورات: '+e.message)}}
+$('reload').onclick=loadCourses;
+async function headers(){if(!auth.currentUser)throw Error('سجّل الدخول');return {'Authorization':'Bearer '+await auth.currentUser.getIdToken()}}
+async function requestApi(path,opts={}){const r=await fetch(API+path,{...opts,headers:{...(await headers()),...(opts.headers||{})}});const t=await r.text();let data;try{data=JSON.parse(t)}catch{data={error:t.slice(0,250)}}if(!r.ok||data.success===false)throw Error(data.error||'HTTP '+r.status);return data}
+$('upload').onclick=async()=>{if(busy)return;const c=courses.find(x=>x.id===$('courseId').value),f=$('file').files?.[0],title=text($('title').value);if(!c)return status('اختر الدورة المطلوبة من القائمة أولًا.');if(!title)return status('اكتب عنوان الملف.');if(!f)return status('اختر ملف PDF من الجهاز.');if(f.size>20*1024*1024)return status('حجم الملف أكبر من 20 ميجابايت.');if(!f.name.toLowerCase().endsWith('.pdf'))return status('اختر ملف PDF.');busy=true;$('upload').disabled=true;$('progress').hidden=false;$('progress').value=15;try{const scope={courseId:c.id,audience:$('audience').value};const data=await requestApi('/pdf/resources',{method:'POST',headers:{'Content-Type':'application/pdf','X-PDF-Title':encodeURIComponent(title),'X-PDF-Category':encodeURIComponent($('category').value),'X-PDF-Scope':encodeURIComponent(JSON.stringify(scope))},body:f});$('progress').value=100;status('تم رفع الملف وحفظه في Cloudflare R2: '+data.id);$('file').value='';$('title').value='';await loadFiles()}catch(e){status('فشل الرفع: '+e.message)}finally{busy=false;$('upload').disabled=false;setTimeout(()=>{$('progress').hidden=true;$('progress').value=0},1400)}};
+function actionBtn(t,fn,cls='secondary'){const b=document.createElement('button');b.textContent=t;b.className=cls;b.onclick=fn;return b}
+async function loadFiles(){if(!currentUser)return;try{let all=[],cursor=null;for(let i=0;i<20;i++){let result=await requestApi('/pdf/resources'+(cursor?'?cursor='+encodeURIComponent(cursor):''));all.push(...(result.items||[]));cursor=result.hasMore?result.cursor:null;if(!cursor)break}files=all.sort((a,b)=>String(b.uploadedAt).localeCompare(String(a.uploadedAt)));renderFiles()}catch(e){status('تعذر قراءة قائمة PDF: '+e.message);$('files').textContent='لم يتم تحميل الملفات.'}}
+$('refreshFiles').onclick=loadFiles;
+function renderFiles(){const root=$('files');root.replaceChildren();if(!files.length){root.innerHTML='<div class="empty">لا توجد ملفات PDF محفوظة.</div>';return}for(const f of files){const scope=f.scope||{},div=document.createElement('div');div.className='item';const content=document.createElement('div');const title=document.createElement('b');title.textContent=f.title||'PDF';const sub=document.createElement('small');sub.textContent=[scope.branch,scope.section,scope.courseType,scope.course,scope.period,scope.startingDate,'الوجهة: '+({both:'طالب ومدرب',student:'طالب',trainer:'مدرب'}[scope.audience]||'غير محددة'),f.active?'منشور':'مخفي'].filter(Boolean).join(' · ');content.append(title,sub);const bar=document.createElement('div');bar.className='buttons';bar.append(actionBtn('عرض',()=>viewPdf(f)),actionBtn('تحميل',()=>downloadPdf(f)),actionBtn(f.active?'إخفاء':'نشر',()=>toggle(f)),actionBtn('حذف',()=>remove(f),'danger'));div.append(content,bar);root.append(div)}}
+async function blobPdf(f){const r=await fetch(API+'/pdf/resources/'+encodeURIComponent(f.id),{headers:await headers()});if(!r.ok)throw Error('تعذر فتح PDF ('+r.status+')');return r.blob()}
+async function viewPdf(f){try{const blob=await blobPdf(f);if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=URL.createObjectURL(blob);$('modalTitle').textContent=f.title;$('viewer').src=objectUrl;$('pdfModal').classList.add('open')}catch(e){status(e.message)}}
+$('closeModal').onclick=()=>{$('pdfModal').classList.remove('open');$('viewer').src='about:blank';if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null};
+async function downloadPdf(f){try{const blob=await blobPdf(f);const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=(f.title||'Prudle PDF').replace(/[\\/:*?"<>|]/g,'-')+'.pdf';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),15000)}catch(e){status(e.message)}}
+async function toggle(f){try{await requestApi('/pdf/resources/'+f.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:!f.active})});status('تم تحديث حالة الملف.');await loadFiles()}catch(e){status(e.message)}}
+async function remove(f){if(!confirm('حذف الملف نهائيًا من R2؟ '+f.title))return;try{await requestApi('/pdf/resources/'+f.id,{method:'DELETE'});status('تم حذف الملف.');await loadFiles()}catch(e){status(e.message)}}
+
+</script></body></html>
